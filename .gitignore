@@ -6,3 +6,7 @@ __pycache__/
 
 .env
 
+
+# dbt generated files
+target/
+logs/

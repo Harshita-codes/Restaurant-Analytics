@@ -1,0 +1,33 @@
+{{ config(materialized='view') }}
+
+SELECT
+    r.RESTAURANT_ID,
+    r.RESTAURANT_NAME,
+    r.REGION,
+    r.CITY,
+    r.STATE,
+    r.STATUS,
+
+    COUNT(DISTINCT f.ORDER_ID) AS TOTAL_ORDERS,
+    SUM(f.QTY) AS TOTAL_QTY,
+
+    SUM(f.GROSS_AMOUNT) AS GROSS_REVENUE,
+    SUM(f.DISCOUNT_AMOUNT) AS DISCOUNT_AMOUNT,
+    SUM(f.NET_AMOUNT) AS NET_REVENUE,
+
+    SUM(f.NET_AMOUNT)
+        / NULLIF(COUNT(DISTINCT f.ORDER_ID), 0)
+        AS AVG_ORDER_VALUE
+
+FROM {{ ref('fact_orders') }} f
+
+JOIN {{ ref('dim_restaurant') }} r
+    ON f.RESTAURANT_KEY = r.RESTAURANT_KEY
+
+GROUP BY
+    r.RESTAURANT_ID,
+    r.RESTAURANT_NAME,
+    r.REGION,
+    r.CITY,
+    r.STATE,
+    r.STATUS
