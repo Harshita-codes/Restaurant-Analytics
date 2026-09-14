@@ -1,0 +1,175 @@
+--Step-6: Check ingestion history before Snowpipe
+SELECT
+    TABLE_NAME,
+    FILE_NAME,
+    STATUS,
+    ROW_COUNT,
+    LAST_LOAD_TIME
+FROM INFORMATION_SCHEMA.LOAD_HISTORY
+WHERE TABLE_NAME IN
+(
+    'RAW_CUSTOMERS',
+    'RAW_RESTAURANTS',
+    'RAW_MENU_ITEMS',
+    'RAW_ORDERS'
+)
+ORDER BY LAST_LOAD_TIME DESC;
+
+--Create Snowpipe for Customer Data
+CREATE OR REPLACE PIPE PIPE_CUSTOMERS
+AS
+COPY INTO RAW_CUSTOMERS
+(
+    CUSTOMER_ID,
+    FIRST_NAME,
+    LAST_NAME,
+    EMAIL,
+    PHONE,
+    LOYALTY_TIER,
+    CITY,
+    STATE,
+    COUNTRY,
+    UPDATED_AT,
+    SOURCE_FILE_NAME
+)
+FROM
+(
+    SELECT
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        TRY_TO_TIMESTAMP_NTZ($10),
+        METADATA$FILENAME
+    FROM @RESTAURANT_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT')
+PATTERN = '.*restaurant_customers_expanded[.]csv'
+ON_ERROR = 'CONTINUE';
+--Verify Customer Snowpipe
+Show pipes;
+
+--CREATE SNOWPIPE FOR RESTAURANT DATA
+CREATE OR REPLACE PIPE PIPE_RESTAURANTS
+AS
+COPY INTO RAW_RESTAURANTS
+(
+    RESTAURANT_ID,
+    RESTAURANT_NAME,
+    REGION,
+    CITY,
+    STATE,
+    COUNTRY,
+    OPEN_DATE,
+    SERVICE_MODES,
+    STATUS,
+    SOURCE_FILE_NAME
+)
+FROM
+(
+    SELECT
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        TRY_TO_DATE($7),
+        $8,
+        $9,
+        METADATA$FILENAME
+    FROM @RESTAURANT_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT')
+PATTERN = '.*restaurant_locations_expanded[.]csv'
+ON_ERROR = 'CONTINUE';
+--VERIFY RESTAURANT SNOWPIPE
+SHOW PIPES;
+
+--CREATE SNOWPIPE FOR MENU ITEM DATA
+CREATE OR REPLACE PIPE PIPE_MENU_ITEMS
+AS
+COPY INTO RAW_MENU_ITEMS
+(
+    MENU_ITEM_ID,
+    ITEM_NAME,
+    ITEM_TYPE,
+    CUISINE,
+    DIET_TYPE,
+    LIST_PRICE,
+    STATUS,
+    UPDATED_AT,
+    SOURCE_FILE_NAME
+)
+FROM
+(
+    SELECT
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        TRY_TO_NUMBER($6, 10, 2),
+        $7,
+        TRY_TO_TIMESTAMP_NTZ($8),
+        METADATA$FILENAME
+    FROM @RESTAURANT_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT')
+PATTERN = '.*menu_items_expanded[.]csv'
+ON_ERROR = 'CONTINUE';
+--VERIFY MENU ITEM SNOWPIPE
+SHOW PIPES;
+
+--CREATE SNOWPIPE FOR ORDER DATA
+CREATE OR REPLACE PIPE PIPE_ORDERS
+AS
+COPY INTO RAW_ORDERS
+(
+    ORDER_ID,
+    ORDER_LINE_ID,
+    ORDER_DATE,
+    CUSTOMER_ID,
+    MENU_ITEM_ID,
+    RESTAURANT_ID,
+    ORDER_CHANNEL,
+    QTY,
+    UNIT_PRICE,
+    DISCOUNT_PCT,
+    PAYMENT_TYPE,
+    ORDER_STATUS,
+    SOURCE_FILE_NAME
+)
+FROM
+(
+    SELECT
+        $1,
+        $2,
+        TRY_TO_DATE($3),
+        $4,
+        $5,
+        $6,
+        $7,
+        TRY_TO_NUMBER($8),
+        TRY_TO_NUMBER($9, 10, 2),
+        TRY_TO_NUMBER($10, 5, 2),
+        $11,
+        $12,
+        METADATA$FILENAME
+    FROM @RESTAURANT_STAGE
+)
+FILE_FORMAT = (FORMAT_NAME = 'CSV_FORMAT')
+PATTERN = '.*restaurant_orders_expanded[.]csv'
+ON_ERROR = 'CONTINUE';
+SHOW PIPES;
+
+--STEP-7: CHECK SNOWPIPE STATUS
+SELECT SYSTEM$PIPE_STATUS('PIPE_CUSTOMERS');
+SELECT SYSTEM$PIPE_STATUS('PIPE_RESTAURANTS');
+SELECT SYSTEM$PIPE_STATUS('PIPE_MENU_ITEMS');
+SELECT SYSTEM$PIPE_STATUS('PIPE_ORDERS');
